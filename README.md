@@ -1,4 +1,4 @@
-# Projeto LSTM Bidirecional para Otimização da Irrigação
+# Implementação de Redes Neurais Recorrentes (LSTM Bidirecionais) para Gestão de Recursos Hídricos em Agricultura de Precisão
 
 Este repositório contém todos os componentes de um projeto que aplica uma rede neural Long Short-Term Memory (LSTM) Bidirecional para otimizar a irrigação de precisão em cultivos agrícolas, integrando dados de clima e solo. O objetivo é melhorar a eficiência da irrigação através de modelos preditivos avançados e técnicas de aprendizado profundo.
 
