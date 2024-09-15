@@ -15,10 +15,6 @@ Este repositório contém todos os componentes de um projeto que aplica uma rede
 ├── requirements.txt          # Lista de dependências Python para reproduzir o ambiente de desenvolvimento
 ├── LICENSE                   # Arquivo de licença para o projeto
 │
-├── data/                     # Dados usados no projeto
-│   ├── raw/                  # Dados brutos não modificados
-│   └── processed/            # Dados processados e limpos
-│
 ├── src/                      # Códigos-fonte para o projeto
 │   ├── main.py               # Script principal para executar o modelo
 │   ├── model.py              # Definições do modelo LSTM Bidirecional
@@ -34,6 +30,14 @@ Este repositório contém todos os componentes de um projeto que aplica uma rede
 │   ├── setup.md
 │   └── usage.md
 │
-└── tests/                    # Testes para assegurar a funcionalidade dos componentes do projeto
-    ├── test_data_preprocessing.py
-    └── test_model.py
+project_root/
+│
+├── data/
+│   ├── raw/               # Dados brutos não processados
+│   ├── processed/         # Dados processados, prontos para uso
+│   ├── training/          # Dados usados especificamente para treinamento
+│   ├── validation/        # Dados usados para validação durante o treinamento
+│   ├── test/              # Dados usados para testar o desempenho final do modelo
+│
+└── models/                # Modelos treinados e checkpoints
+
