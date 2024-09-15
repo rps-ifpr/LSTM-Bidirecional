@@ -1,46 +1,97 @@
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.cluster import KMeans
+from scipy.stats import zscore
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, LSTM, Bidirectional, Dropout
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # Configuração inicial do Streamlit
 st.set_page_config(layout="wide")
-st.title('Previsão de Irrigação com LSTM Bidirecional')
+st.title('Análise de Componentes Principais (PCA) e Previsão com LSTM')
 
 
-# Função para carregar e preparar os dados
-def carregar_dados(caminho):
-    data = pd.read_csv(caminho, delimiter=';', decimal=',')
-    data['datetime'] = pd.to_datetime(data['Data'] + ' ' + data['Hora'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
-    data.drop(['Data', 'Hora'], axis=1, inplace=True)
-
-    # Convertendo as colunas relevantes para numérico
-    cols_to_numeric = ['PRECIPITAÇÃO TOTAL', 'TEMPERATURA DO AR BULBO SECO (°C)', 'TEMP MAX (°C)',
-                       'TEMP MÍN (°C)', 'UMIDADE RELATIVA DO AR (%)', 'PRESSAO ATMOSFERICA',
-                       'RADIACAO GLOBAL (Kj/m²)']
-    for col in cols_to_numeric:
-        data[col] = pd.to_numeric(data[col], errors='coerce')  # Converte para numérico, coercing errors to NaN
-
-    # Feature Engineering
-    data['hora'] = data['datetime'].dt.hour
-    data['dia_da_semana'] = data['datetime'].dt.dayofweek
-    data['mes'] = data['datetime'].dt.month
-    data['precipitação_média_móvel'] = data['PRECIPITAÇÃO TOTAL'].rolling(window=3).mean()
-    data['diferença_temp_ar'] = data['TEMPERATURA DO AR BULBO SECO (°C)'].diff()
-
-    # Remover ou substituir NaNs
-    data.fillna(method='ffill', inplace=True)  # Forward fill para NaNs iniciais
-    data.dropna(inplace=True)  # Remove linhas restantes com NaN
-
+# Função para carregar os dados processados
+def carregar_dados_processados(caminho):
+    try:
+        data = pd.read_csv(caminho, delimiter=';', decimal=',', encoding='latin1')
+        st.write("Dados processados carregados com sucesso:")
+        st.write(data.head())  # Mostrar uma amostra dos dados carregados para verificar a consistência
+    except Exception as e:
+        st.error(f"Erro ao carregar os dados processados. Detalhes: {e}")
+        return None
     return data
 
 
-# Função para normalizar os dados
+# Função para aplicar PCA e K-Means e visualizar os resultados
+def aplicar_pca_kmeans(data):
+    # Preparar os dados para PCA
+    features = ['PRECIPITAÇÃO TOTAL', 'TEMPERATURA DO AR BULBO SECO (°C)', 'TEMP MAX (°C)',
+                'TEMP MÍN (°C)', 'UMIDADE RELATIVA DO AR (%)', 'PRESSAO ATMOSFERICA', 'RADIACAO GLOBAL (Kj/m²)']
+
+    # Verificar se todas as colunas estão presentes
+    if not all(feature in data.columns for feature in features):
+        st.error("Algumas das colunas especificadas não estão presentes no DataFrame.")
+        st.stop()
+
+    # Aplicar a padronização dos dados
+    scaler = StandardScaler()
+    data_scaled = scaler.fit_transform(data[features])
+
+    # Aplicar PCA
+    pca = PCA(n_components=2)
+    principalComponents = pca.fit_transform(data_scaled)
+    principalDf = pd.DataFrame(data=principalComponents, columns=['PC1', 'PC2'])
+
+    # Plotar os componentes principais
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.scatter(principalDf['PC1'], principalDf['PC2'], alpha=0.5)
+    ax.set_xlabel('Componente Principal 1')
+    ax.set_ylabel('Componente Principal 2')
+    ax.set_title('PCA - Componentes Principais')
+    ax.grid(True)
+    st.pyplot(fig)
+
+    # Identificar possíveis outliers usando score Z
+    z_scores = np.abs(zscore(principalDf))
+    outliers = (z_scores > 3).any(axis=1)
+    outlier_data = principalDf[outliers]
+
+    # Plotar os componentes principais com outliers destacados
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.scatter(principalDf['PC1'], principalDf['PC2'], alpha=0.5)
+    ax.scatter(outlier_data['PC1'], outlier_data['PC2'], color='red', label='Outliers')  # Outliers marcados em vermelho
+    ax.set_xlabel('Componente Principal 1')
+    ax.set_ylabel('Componente Principal 2')
+    ax.set_title('PCA - Outliers destacados')
+    ax.legend()
+    ax.grid(True)
+    st.pyplot(fig)
+
+    # Aplicar K-means para identificar agrupamentos
+    kmeans = KMeans(n_clusters=3)
+    principalDf['cluster'] = kmeans.fit_predict(principalDf[['PC1', 'PC2']])
+
+    # Plotar os clusters
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for cluster in principalDf['cluster'].unique():
+        cluster_data = principalDf[principalDf['cluster'] == cluster]
+        ax.scatter(cluster_data['PC1'], cluster_data['PC2'], label=f'Cluster {cluster}')
+    ax.set_xlabel('Componente Principal 1')
+    ax.set_ylabel('Componente Principal 2')
+    ax.set_title('PCA - Clusters')
+    ax.legend()
+    ax.grid(True)
+    st.pyplot(fig)
+
+
+# Função para normalizar os dados para o modelo LSTM
 def normalizar_dados(data, columns):
     scaler = MinMaxScaler()
     data_scaled = scaler.fit_transform(data[columns])
@@ -69,16 +120,17 @@ def construir_modelo(input_shape):
 
 
 # Função para treinar o modelo
-def treinar_modelo(model, X_train, y_train):
+def treinar_modelo(model, X_train, y_train, save_path):
+    checkpoint = ModelCheckpoint(filepath=save_path, monitor='val_loss', save_best_only=True, verbose=1)
     early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
-    history = model.fit(X_train, y_train, epochs=50, validation_split=0.2, callbacks=[early_stopping], verbose=1)
+    history = model.fit(X_train, y_train, epochs=50, validation_split=0.2, callbacks=[early_stopping, checkpoint],
+                        verbose=1)
     return history
 
 
 # Função para avaliar o modelo
 def avaliar_modelo(model, X_test, y_test):
     y_pred = model.predict(X_test)
-    # Verificar NaNs em y_test e y_pred
     if np.isnan(y_test).any() or np.isnan(y_pred).any():
         raise ValueError("Existem valores NaN nas previsões ou nos dados de teste!")
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
@@ -100,45 +152,50 @@ def visualizar_previsoes(y_test, y_pred):
     st.pyplot(fig)
 
 
-# Caminho do arquivo processado
+# Definir caminhos conforme a estrutura de diretórios
 caminho_processado = '../data/processed/INMET_S_SC_A863_ITUPORANGA_PROCESSADO.CSV'
+caminho_modelo = '../models/best_model.h5'
 
-# Carregar e preparar os dados
-data = carregar_dados(caminho_processado)
+# Carregar os dados processados
+data_processada = carregar_dados_processados(caminho_processado)
 
-# Selecionar as colunas de interesse
-columns_of_interest = ['PRECIPITAÇÃO TOTAL', 'TEMPERATURA DO AR BULBO SECO (°C)', 'TEMP MAX (°C)',
-                       'TEMP MÍN (°C)', 'UMIDADE RELATIVA DO AR (%)', 'PRESSAO ATMOSFERICA', 'RADIACAO GLOBAL (Kj/m²)',
-                       'hora', 'dia_da_semana', 'mes', 'precipitação_média_móvel', 'diferença_temp_ar']
+if data_processada is not None:
+    # Aplicar PCA e K-Means
+    aplicar_pca_kmeans(data_processada)
 
-# Normalização dos dados
-data_scaled, scaler = normalizar_dados(data, columns_of_interest)
+    # Selecionar as colunas de interesse para o modelo LSTM
+    columns_of_interest = ['PRECIPITAÇÃO TOTAL', 'TEMPERATURA DO AR BULBO SECO (°C)', 'TEMP MAX (°C)',
+                           'TEMP MÍN (°C)', 'UMIDADE RELATIVA DO AR (%)', 'PRESSAO ATMOSFERICA',
+                           'RADIACAO GLOBAL (KJ/M²)', 'hora', 'dia_da_semana', 'mes',
+                           'precipitação_média_móvel', 'diferença_temp_ar']
 
-# Criar sequências de entrada e saída
-n_steps = 24  # Previsão com base nas últimas 24 horas
-X, y = create_sequences(data_scaled, n_steps)
+    # Normalização dos dados para LSTM
+    data_scaled, scaler = normalizar_dados(data_processada, columns_of_interest)
 
-# Dividir os dados em treinamento e teste
-split = int(0.8 * len(X))
-X_train, X_test = X[:split], X[split:]
-y_train, y_test = y[:split], y[split:]
+    # Criar sequências de entrada e saída para o modelo LSTM
+    n_steps = 24  # Previsão com base nas últimas 24 horas
+    X, y = create_sequences(data_scaled, n_steps)
 
-# Construção e treinamento do modelo
-input_shape = (n_steps, X.shape[2])
-model = construir_modelo(input_shape)
-treinar_modelo(model, X_train, y_train)
+    # Dividir os dados em treinamento e teste
+    split = int(0.8 * len(X))
+    X_train, X_test = X[:split], X[split:]
+    y_train, y_test = y[:split], y[split:]
 
-# Avaliação do modelo
-try:
-    y_pred, rmse, mae, mape, r2 = avaliar_modelo(model, X_test, y_test)
-    # Exibir resultados de avaliação
-    st.write(f"Erro Quadrático Médio (RMSE): {rmse:.2f}")
-    st.write(f"Erro Médio Absoluto (MAE): {mae:.2f}")
-    st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape:.2f}%")
-    st.write(f"Coeficiente de Determinação (R²): {r2:.2f}")
+    # Construção e treinamento do modelo LSTM
+    input_shape = (n_steps, X.shape[2])
+    model = construir_modelo(input_shape)
+    treinar_modelo(model, X_train, y_train, caminho_modelo)
 
-    # Visualizar previsões
-    visualizar_previsoes(y_test, y_pred)
+    # Avaliação do modelo
+    try:
+        y_pred, rmse, mae, mape, r2 = avaliar_modelo(model, X_test, y_test)
+        st.write(f"Erro Quadrático Médio (RMSE): {rmse:.2f}")
+        st.write(f"Erro Médio Absoluto (MAE): {mae:.2f}")
+        st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape:.2f}%")
+        st.write(f"Coeficiente de Determinação (R²): {r2:.2f}")
 
-except ValueError as e:
-    st.error(f"Erro durante a avaliação do modelo: {e}")
+        # Visualizar previsões
+        visualizar_previsoes(y_test, y_pred)
+
+    except ValueError as e:
+        st.error(f"Erro durante a avaliação do modelo: {e}")
