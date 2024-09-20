@@ -1,78 +1,29 @@
-#Este arquivo app1 é usado para limpa as 8 primeiras linhas dos arquivos
-#Informações de Localizacao
 import os
 import pandas as pd
 
-# Defina o caminho do arquivo original com metadados
+# Caminhos dos arquivos
 caminho_original = '../data/raw/INMET_S_SC_A863_ITUPORANGA.CSV'
-
-# Defina o caminho para salvar o novo arquivo limpo
 caminho_limpo = '../data/raw/INMET_S_SC_A863_ITUPORANGA_LIMPO.CSV'
 
-# Mostrar o caminho absoluto do arquivo original para confirmar a localização
-caminho_absoluto = os.path.abspath(caminho_original)
-print(f"Tentando acessar o arquivo em: {caminho_absoluto}")
-
-# Verificar se o arquivo existe
-if os.path.exists(caminho_absoluto):
-    print("Arquivo encontrado.")
-    try:
-        # Ler o arquivo, ignorando as primeiras 8 linhas que contêm metadados
-        dados = pd.read_csv(caminho_absoluto, encoding='latin1', skiprows=8, sep=';')
-
-        # Renomear as colunas conforme especificado
-        colunas_renomeadas = {
-            'Data': 'Data',
-            'Hora UTC': 'Hora',
-            'PRECIPITAÇÃO TOTAL, HORÁRIO (mm)': 'PRECIPITAÇÃO TOTAL',
-            'PRESSAO ATMOSFERICA AO NIVEL DA ESTACAO, HORARIA (mB)': 'PRESSAO ATMOSFERICA',
-            'PRESSÃO ATMOSFERICA MAX.NA HORA ANT. (AUT) (mB)': 'PRESSÃO ATMOSFERICA MAX (mB)',
-            'PRESSÃO ATMOSFERICA MIN. NA HORA ANT. (AUT) (mB)': 'PRESSÃO ATMOSFERICA MIN (mB)',
-            'RADIACAO GLOBAL (Kj/m²)': 'RADIACAO GLOBAL (Kj/m²)',
-            'TEMPERATURA DO AR - BULBO SECO, HORARIA (°C)': 'TEMPERATURA DO AR BULBO SECO (°C)',
-            'TEMPERATURA DO PONTO DE ORVALHO (°C)': 'TEMP PONTO DE ORVALHO (°C)',
-            'TEMPERATURA MÁXIMA NA HORA ANT. (AUT) (°C)': 'TEMP MAX (°C)',
-            'TEMPERATURA MÍNIMA NA HORA ANT. (AUT) (°C)': 'TEMP MÍN (°C)',
-            'TEMPERATURA ORVALHO MAX. NA HORA ANT. (AUT) (°C)': 'TEMP ORVALHO MAX (°C)',
-            'TEMPERATURA ORVALHO MIN. NA HORA ANT. (AUT) (°C)': 'TEMP ORVALHO MIN (°C)',
-            'UMIDADE REL. MAX. NA HORA ANT. (AUT) (%)': 'UMIDADE REL. MAX (%)',
-            'UMIDADE REL. MIN. NA HORA ANT. (AUT) (%)': 'UMIDADE REL. MIN (%)',
-            'UMIDADE RELATIVA DO AR, HORARIA (%)': 'UMIDADE RELATIVA DO AR (%)',
-            'VENTO, DIREÇÃO HORARIA (gr) (° (gr))': 'VENTO DIREÇÃO (gr)°',
-            'VENTO, RAJADA MAXIMA (m/s)': 'VENTO RAJADA (m/s)',
-            'VENTO, VELOCIDADE HORARIA (m/s)': 'VENTO VELOCIDADE (m/s)'
-        }
-        dados.rename(columns=colunas_renomeadas, inplace=True)
-
-        # Garantir que a coluna Hora seja string antes de usar .str.replace()
-        if 'Hora' in dados.columns:
-            dados['Hora'] = dados['Hora'].astype(str).str.replace(' UTC', '')
-            # Converter para tipo time
-            dados['Hora'] = pd.to_datetime(dados['Hora'], format='%H%M').dt.time
-
-        # Converter a coluna de Data para o tipo datetime
-        if 'Data' in dados.columns:
-            dados['Data'] = pd.to_datetime(dados['Data'], format='%Y/%m/%d')
-
-        # Convertendo colunas numéricas de string com vírgula decimal para float
-        colunas_numericas = [col for col in dados.columns if dados[col].dtype == object]
-        for col in colunas_numericas:
-            try:
-                dados[col] = pd.to_numeric(dados[col].str.replace(',', '.'), errors='coerce')
-            except Exception as e:
-                print(f"Erro ao converter coluna {col} para numérico: {e}")
-
-        # Preencher valores nulos com forward fill
-        dados.ffill(inplace=True)  # Uso de ffill() diretamente
-
-        # Salva o dataframe limpo em um novo arquivo CSV
-        dados.to_csv(caminho_limpo, index=False, sep=';')
-
-        print("Arquivo limpo salvo com sucesso em:", caminho_limpo)
-        print(dados.head())
-        print(dados.dtypes)  # Exibir tipos de dados para confirmação
-
-    except Exception as e:
-        print(f"Erro ao processar o arquivo: {e}")
+# Verifica a existência do arquivo e processa se encontrado
+if os.path.exists(caminho_original):
+    print("Arquivo encontrado, processando...")
+    dados = pd.read_csv(caminho_original, encoding='latin1', skiprows=8, sep=';')
+    dados.columns = [
+        # Renomeando todas as colunas relevantes diretamente aqui
+        'Data', 'Hora', 'PRECIPITAÇÃO TOTAL', 'PRESSAO ATMOSFERICA',
+        'PRESSÃO ATMOSFERICA MAX', 'PRESSÃO ATMOSFERICA MIN',
+        'RADIACAO GLOBAL', 'TEMPERATURA DO AR', 'TEMP PONTO DE ORVALHO',
+        'TEMP MAX', 'TEMP MÍN', 'TEMP ORVALHO MAX', 'TEMP ORVALHO MIN',
+        'UMIDADE REL. MAX', 'UMIDADE REL. MIN', 'UMIDADE RELATIVA DO AR',
+        'VENTO DIREÇÃO', 'VENTO RAJADA MAX', 'VENTO VELOCIDADE'
+    ]
+    dados['Hora'] = pd.to_datetime(dados['Hora'].str.replace(' UTC', ''), format='%H%M').dt.time
+    dados['Data'] = pd.to_datetime(dados['Data'], format='%Y/%m/%d')
+    for coluna in dados.select_dtypes(include=['object']).columns:
+        dados[coluna] = pd.to_numeric(dados[coluna].str.replace(',', '.'), errors='coerce')
+    dados.ffill(inplace=True)
+    dados.to_csv(caminho_limpo, index=False, sep=';')
+    print("Dados limpos salvos com sucesso.")
 else:
-    print("Arquivo não encontrado. Verifique o caminho:", caminho_absoluto)
+    print(f"Arquivo não encontrado: {caminho_original}")
