@@ -13,7 +13,7 @@ st.set_page_config(layout="wide")
 st.title('Análise Exploratória de Dados Meteorológicos para LSTM Bidirecional')
 
 # Caminho do arquivo processado
-caminho_processado = '../data/processed/INMET_S_SC_A863_ITUPORANGA_PROCESSADO.CSV'
+caminho_processado = '../data/processed/*.CSV'
 
 # Carregar o arquivo processado
 data = pd.read_csv(
