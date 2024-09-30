@@ -13,7 +13,7 @@ st.set_page_config(layout="wide")
 st.title('Análise Exploratória de Dados Meteorológicos para LSTM Bidirecional')
 
 # Caminho do arquivo processado
-caminho_processado = '../data/processed/*.CSV'
+caminho_processado = '../data/processed/INMET_S_PR_A807_CURITIBA_01-01-2023_A_31-12-2023_PROCESSADO.CSV'
 
 # Carregar o arquivo processado
 data = pd.read_csv(
